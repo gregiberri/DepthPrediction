@@ -1,0 +1,104 @@
+env:
+  epochs: 500
+  step_decay: 1
+  bad_scene_retrain: False
+  save_train_frequency: 2500
+  print_metrics: ['loss', 'rmse', 'mae']
+pretrain_data:
+  name:
+data:
+  name: "kitti"
+  params:
+    path: '/home/albert/data/kitti'
+    split: ["train", "val"]
+    inputs: ['rgb', 'depth']
+    input_size: [352, 1216]
+    norm_type: "imagenet-norm"
+    small: False
+    lidar_sparsity_decay: 1.0
+    batch_size: 2
+    augmentation:
+      random_flip: 0.5
+      random_noise: 5
+      gauss_blur: 0.5
+      random_shift: 10
+      random_hue_saturation: 5
+model:
+  name: "base_model"
+  params:
+    bottom:
+      name: 'early_fusion'
+      params:
+        input_channels: 4
+        bottom_features: 16
+        conv:
+          name: 'conv'
+          params:
+            kernel_size: 3
+        norm:
+          name: 'batch_norm'
+        activation:
+          name: 'relu'
+    backbone:
+      name: 'ERFNet' # ResNet or ERFNet
+      params:
+        input_features: 16
+        pretrained: 'pretrained_models/erfnet_pretrained.pth'
+        backbone_features: 16
+#        module_numbers: [1, 2, 2, 2]
+        filter_numbers: [16, 32, 64, 128]
+#        conv:
+#          name: 'conv'
+#          params:
+#            kernel_size: 3
+#            bias: False
+#        norm:
+#          name: 'batch_norm'
+        activation:
+          name: 'relu'
+        scene_understanding: 'sequential'  # parallel or sequential
+    top:
+      name: 'bifpn_last'
+      params:
+        pretrained: False
+        feature_numbers: [16, 16, 64, 128]
+        cell_number: 2
+        backbone_depth: 4
+        feature_type:
+          name: 'last_layer'  # last layer or layer_fusion
+          params:
+            top_feature_number: 16
+            scaling_method: 'bilinear'
+        conv:
+          name: 'conv'
+          params:
+            kernel_size: 3
+            bias: False
+        norm:
+          name: 'batch_norm'
+        activation:
+            name: 'relu'
+    head:
+      name: 'regression'
+      params:
+        backbone_features: 16
+        output_channels: 1
+        input_size: [352, 1216]
+        scaling_method: 'bilinear'
+        # discretization: "SID"
+        regression_criteria:
+          name: 'l2'
+          # ord_num: 90
+          # gamma: -0.97
+          # beta: 90.0
+optimizer:
+  name: 'radam'
+  params:
+    lr: 0.0001
+    weight_decay: 0.0005
+#    grad_clip: False
+lr_policy:
+  name: 'poly'
+  params:
+    gamma: 0.9
+    n_iteration: 300636
