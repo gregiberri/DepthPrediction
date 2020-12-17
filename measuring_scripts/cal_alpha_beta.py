@@ -10,7 +10,7 @@ from tqdm import tqdm
 import numpy as np
 
 
-from datasets import KittiDepthLoader
+from data import KittiDepthLoader
 
 root_dir = "/data/wangxin/KITTI"
 filelist = "./kitti_trainval.list"

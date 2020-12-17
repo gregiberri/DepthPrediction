@@ -1,15 +1,15 @@
 from torch.utils.data import DataLoader
 
-from datasets import datasets
+from data.datasets import kitti_dataset
 import numpy as np
 
-from datasets.collate import collate_fn
+from data.collate import collate_fn
 
 
 def get_dataloader(data_config, is_train):
     # get the iterator object
     if data_config.name == 'kitti':
-        dataset = datasets.Kitti(data_config.params, is_train=is_train)
+        dataset = kitti_dataset.Kitti(data_config.params, is_train=is_train)
     elif data_config.name == 'audi':
         raise NotImplementedError()
     else:

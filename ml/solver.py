@@ -13,7 +13,7 @@ import sys
 from tqdm import tqdm
 
 from config import ConfigNameSpace
-from datasets import get_dataloader
+from data.datasets import get_dataloader
 from ml.metrics.average_meter import AverageMeter
 from ml.metrics.metrics import Metrics
 from ml.models import get_model
@@ -33,7 +33,6 @@ import random
 import inspect
 
 import torch
-from torch.nn.utils import clip_grad_norm_
 from ml.utils.pyt_io import load_model, create_summary_writer
 from ml.utils.pyt_ops import tensor2cuda
 
@@ -266,7 +265,7 @@ class Solver(object):
             self.save_best_checkpoint(self.train_metric.epoch_results)
 
             # validation
-            # first set the val dataset lidar sparsity to the train datasets current one
+            # first set the val dataset lidar sparsity to the train data current one
             self.val_loader.dataset.lidar_sparsity = self.train_loader.dataset.lidar_sparsity
             # TODO
             # self.eval()

@@ -12,8 +12,8 @@ import numpy as np
 
 from imgaug import HeatmapsOnImage
 
-from datasets.base_dataset import BaseDataset
-from datasets.utils import nomalize, kitti_image_loader, kitti_depth_loader
+from data.datasets.base_dataset import BaseDataset
+from data.utils import nomalize, kitti_image_loader, kitti_depth_loader
 
 
 class Kitti(BaseDataset):
