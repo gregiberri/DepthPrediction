@@ -12,7 +12,7 @@ os.chdir(os.path.join('/', *cwd.split('/')[:-1]))
 
 from config import ConfigNameSpace
 
-config = ConfigNameSpace('config/config_files/kitti_base.yaml')
+config = ConfigNameSpace('config/config_files/occl_filt.yaml')
 config.data.params.batch_size = 1
 train_loader, niter_per_epoch = get_dataloader(config.data, is_train=True)
 
@@ -45,4 +45,4 @@ for i, inputs in enumerate(train_loader):
 print(f'\n'
       f'mean_raw_error: {train_metric.rmse.mean():.3f}\n'
       f'mean_raw_point_number: {np.mean(raw_point_numbers):.3f}')
-train_metric.rmse_scene_meter.draw_histogram('6_occlusion_filtered.png')
+train_metric.rmse_scene_meter.draw_histogram('occlusion_filtered.png')

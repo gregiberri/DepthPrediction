@@ -106,5 +106,7 @@ class ConfigNameSpace(SimpleNamespace):
         for key, value in config.items():
             if isinstance(value, dict):
                 self.update({key: ConfigNameSpace(value)})
+            elif isinstance(self.__dict__.get(key), ConfigNameSpace):
+                self.__dict__.get(key).update(value)
             else:
                 self.__dict__.update({key: value})
