@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
+import inspect
 import logging
 import multiprocessing
 from types import SimpleNamespace
@@ -11,15 +12,18 @@ yaml.Dumper.ignore_aliases = lambda *args: True
 
 
 class ConfigNameSpace(SimpleNamespace):
-    def __init__(self, **kwargs):
+    def __init__(self, config):
         """
-        Make config namespace from dict.
+        Make config namespace from dict or from a yaml file path.
+
+        :param config: a dictionary or a path of a yaml file containing the config.
         """
-        for kwarg in kwargs.items():
-            if isinstance(kwarg[1], dict):
-                self.__dict__.update({kwarg[0]: ConfigNameSpace(**kwarg[1])})
-            else:
-                self.__dict__.update({kwarg[0]: kwarg[1]})
+        if isinstance(config, dict):
+            self.update(config)
+        elif isinstance(config, str):
+            self.load(config)
+        else:
+            raise ValueError('The constructor parameter of the ConfigNameSpace object should be a dict or a str path.')
 
     def __getattr__(self, name):
         """
@@ -28,8 +32,11 @@ class ConfigNameSpace(SimpleNamespace):
         try:
             super(ConfigNameSpace, self).__getattr__()
         except AttributeError:
-            logging.warning(f'The required config attribute: `{name}` does not exist, returned `None` instead.')
-            return None
+            parent_info = inspect.getouterframes(inspect.currentframe())[1]
+
+            logging.warning(f'The required config attribute: `{name}`  in {parent_info[1]} '
+                            f'line {parent_info[2]} does not exist, returned `None` instead.')
+        return None
 
     def __len__(self):
         return len(self.__dict__)
@@ -53,8 +60,7 @@ class ConfigNameSpace(SimpleNamespace):
         """
         with open(path) as f:
             config = yaml.safe_load(f)
-        self.__init__(**config)
-        return self
+        self.update(config)
 
     def save(self, path):
         """
@@ -86,10 +92,19 @@ class ConfigNameSpace(SimpleNamespace):
     def __eq__(self, other):
         return self.__dict__ == other.__dict__
 
-    def update(self, other):
-        if isinstance(other, ConfigNameSpace):
-            self.__dict__.update(other.__dict__)
-        elif isinstance(other, dict):
-            self.__dict__.update(other)
+    def update(self, config):
+        if isinstance(config, ConfigNameSpace):
+            config = config.__dict__
+        elif isinstance(config, dict):
+            pass
         else:
             raise ValueError('other object used for update should be Namespace of dict.')
+
+        if config.get('base_config') is not None:
+            self.load(config['base_config'])
+
+        for key, value in config.items():
+            if isinstance(value, dict):
+                self.update({key: ConfigNameSpace(value)})
+            else:
+                self.__dict__.update({key: value})
