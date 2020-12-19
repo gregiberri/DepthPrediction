@@ -98,7 +98,7 @@ class Solver(object):
 
         # read config from config file
         elif self.args.mode in ['pretrain', 'train']:
-            self.config = ConfigNameSpace().load(self.args.config)
+            self.config = ConfigNameSpace(self.args.config)
             self.config.id = self.args.id
 
             # if no id is provided, then use the current timestamp

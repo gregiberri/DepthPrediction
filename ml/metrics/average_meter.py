@@ -3,8 +3,7 @@
 # @Author  : Wang Xin
 # @Email   : wangxin_buaa@163.com
 # @File    : average_meter.py
-
-
+import collections
 import copy
 import numpy as np
 from ml.utils.wrappers import make_iterative_func
@@ -85,11 +84,17 @@ class SceneMeter(object):
     def values(self):
         return {key: scene_meter.mean() for key, scene_meter in self.scenes.items()}
 
+    def sort_by_scene_name(self):
+        self.scenes = collections.OrderedDict(sorted(self.scenes.items()))
+
     def draw_histogram(self, path):
+        self.sort_by_scene_name()
         means = self.mean()
         plt.bar(means.keys(), means.values())
+        # plt.ylim([0, 3500])
         plt.savefig(path)
         plt.close()
+
 
 class AverageMeterDict(object):
     def __init__(self):

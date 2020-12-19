@@ -33,7 +33,7 @@ def compute_metric(output, target):
     abs_diff = (output - target).abs()
 
     mse = (torch.pow(abs_diff, 2)).mean()
-    rmse = torch.sqrt(mse)
+    rmse = torch.sqrt(mse) * 1000
     mae = abs_diff.mean()
     absrel = (abs_diff / target).mean()
 

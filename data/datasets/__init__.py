@@ -24,7 +24,7 @@ def get_dataloader(data_config, is_train):
     # make the torch dataloader object
     loader = DataLoader(dataset,
                         batch_size=batch_size,
-                        num_workers=0,
+                        num_workers=data_config.params.workers,
                         drop_last=False,
                         shuffle=shuffle,
                         pin_memory=False,

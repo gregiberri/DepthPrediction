@@ -13,6 +13,7 @@ import numpy as np
 from imgaug import HeatmapsOnImage
 
 from data.datasets.base_dataset import BaseDataset
+from data.occlusion_filter import filter_occlusions_with_parameters
 from data.utils import nomalize, kitti_image_loader, kitti_depth_loader
 
 
@@ -105,6 +106,14 @@ class Kitti(BaseDataset):
         # augment
         image, depth_gt = self.aug(image=image, heatmaps=depth_gt_heatmap)
         depth, gt = np.transpose(depth_gt.get_arr(), [2, 0, 1])
+
+        # filter out the occluded lidar points
+        if self.config.occlusion_filter is not None:
+            depth = filter_occlusions_with_parameters(depth,
+                                                      self.config.occlusion_filter.params.distance_threshold,
+                                                      self.config.occlusion_filter.params.kernel_size)
+
+        # expand dims to get channel first
         depth = np.expand_dims(depth, 0)
         gt = np.expand_dims(gt, 0)
 
@@ -145,10 +154,16 @@ class Kitti(BaseDataset):
         gt = np.array(gt)[gtH-shape[0]:, gtW-shape[1]:]
         gt = gt.astype(np.float32)
 
+        # filter out the occluded lidar points
+        if self.config.occlusion_filter is not None:
+            depth = filter_occlusions_with_parameters(depth,
+                                                      self.config.occlusion_filter.params.distence_threshold,
+                                                      self.config.occlusion_filter.params.kernel_size)
+
         # normalize
         image_n = np.array(image).astype(np.float32)
         image = np.asarray(image).astype(np.float32) / 255.0
-        image = nomalize(image, type=self.config['norm_type'])
+        image = nomalize(image, type=self.config.norm_type)
         image = image.transpose(2, 0, 1)
 
         output_dict = {"image_n": image_n, 'depth_n': np.squeeze(depth)}

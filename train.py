@@ -22,7 +22,7 @@ parser = argparse.ArgumentParser(description='Training script')
 parser.add_argument('--id', type=str, default='base', help='Id of the training')
 parser.add_argument('--mode', type=str, default='train', choices=['pretrain', 'train', 'val', 'resume', 'hyperopt'],
                     help='The mode of the running.')
-parser.add_argument('-c', '--config', type=str, default='config/kitti_base.yaml', help='Config file name')
+parser.add_argument('-c', '--config', type=str, default='config/config_files/kitti_base.yaml', help='Config file name')
 
 args = parser.parse_args()
 
