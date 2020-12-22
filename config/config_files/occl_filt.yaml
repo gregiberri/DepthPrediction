@@ -1,8 +1,7 @@
 base_config: 'config/config_files/kitti_base.yaml'
 data:
   params:
-    workers: 4
     occlusion_filter:
       params:
-        distance_threshold: 0.5
+        distance_threshold: 1.0
         kernel_size: 5

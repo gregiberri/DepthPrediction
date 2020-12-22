@@ -18,7 +18,6 @@ from data.utils import nomalize, kitti_image_loader, kitti_depth_loader
 
 
 class Kitti(BaseDataset):
-
     def __init__(self, config, is_train=True, image_loader=kitti_image_loader, depth_loader=kitti_depth_loader, scenes=''):
         super().__init__(config, is_train, image_loader, depth_loader)
         self.config = config
@@ -83,7 +82,7 @@ class Kitti(BaseDataset):
 
         return {'image_paths': image_paths, 'depth_paths': depth_paths, 'gt_paths': gt_paths}
 
-    def _train_preprocess(self, image, depth, gt):
+    def _preprocess(self, image, depth, gt):
         crop_h, crop_w = self.config.input_size
         # resize
         H, W = image.shape[:2]
@@ -99,13 +98,14 @@ class Kitti(BaseDataset):
         depth = np.array(depth)[dH-shape[0]:, dW-shape[1]:]
         gt = np.array(gt)[gtH-shape[0]:, gtW-shape[1]:]
 
-        # make heatmap from depth and gt to do only the corresponding augmentations
-        depth_gt = np.stack([depth, gt], -1)
-        depth_gt_heatmap = HeatmapsOnImage(depth_gt, shape=image.shape, min_value=-1.0, max_value=np.max(depth))
+        if self.is_train:
+            # make heatmap from depth and gt to do only the corresponding augmentations
+            depth_gt = np.stack([depth, gt], -1)
+            depth_gt_heatmap = HeatmapsOnImage(depth_gt, shape=image.shape, min_value=-1.0, max_value=np.max(depth))
 
-        # augment
-        image, depth_gt = self.aug(image=image, heatmaps=depth_gt_heatmap)
-        depth, gt = np.transpose(depth_gt.get_arr(), [2, 0, 1])
+            # augment
+            image, depth_gt = self.aug(image=image, heatmaps=depth_gt_heatmap)
+            depth, gt = np.transpose(depth_gt.get_arr(), [2, 0, 1])
 
         # filter out the occluded lidar points
         if self.config.occlusion_filter is not None:
@@ -132,41 +132,6 @@ class Kitti(BaseDataset):
         output_dict = {"image_n": image_n, 'depth_n': np.squeeze(depth)}
 
         self.lidar_sparsity *= self.lidar_sparsity_decay
-
-        return image, depth, gt, output_dict
-
-    def _val_preprocess(self, image, depth, gt):
-        crop_h, crop_w = self.config.input_size
-        # sizes
-        H, W = image.shape[:2]
-        dH, dW = depth.shape
-        gtH, gtW = gt.shape
-
-        assert W == dW and H == dH, \
-            "image shape should be same with depth, but image shape is {}, depth shape is {}".format((H, W), (dH, dW))
-
-        # bottom crop
-        shape = [crop_h, crop_w, 1]
-        image = np.array(image)[H-shape[0]:, W-shape[1]:]
-        depth = np.array(depth)[dH-shape[0]:, dW-shape[1]:]
-        depth = depth.astype(np.float32)
-        depth = np.expand_dims(depth, 0)
-        gt = np.array(gt)[gtH-shape[0]:, gtW-shape[1]:]
-        gt = gt.astype(np.float32)
-
-        # filter out the occluded lidar points
-        if self.config.occlusion_filter is not None:
-            depth = filter_occlusions_with_parameters(depth,
-                                                      self.config.occlusion_filter.params.distence_threshold,
-                                                      self.config.occlusion_filter.params.kernel_size)
-
-        # normalize
-        image_n = np.array(image).astype(np.float32)
-        image = np.asarray(image).astype(np.float32) / 255.0
-        image = nomalize(image, type=self.config.norm_type)
-        image = image.transpose(2, 0, 1)
-
-        output_dict = {"image_n": image_n, 'depth_n': np.squeeze(depth)}
 
         return image, depth, gt, output_dict
 

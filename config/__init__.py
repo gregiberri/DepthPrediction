@@ -34,9 +34,10 @@ class ConfigNameSpace(SimpleNamespace):
         except AttributeError:
             parent_info = inspect.getouterframes(inspect.currentframe())[1]
 
-            logging.warning(f'The required config attribute: `{name}`  in {parent_info[1]} '
+            logging.warning(f'The required config attribute: `{name}` in {parent_info[1]} '
                             f'line {parent_info[2]} does not exist, returned `None` instead.')
-        return None
+            self.update({name: None})
+            return self.__dict__[name]
 
     def __len__(self):
         return len(self.__dict__)

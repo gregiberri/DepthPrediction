@@ -15,6 +15,7 @@ import imgaug.augmenters as iaa
 class BaseDataset(data.Dataset):
     def __init__(self, config, is_train=True, image_loader=None, depth_loader=None):
         super(BaseDataset, self).__init__()
+        self.is_train = is_train
         self.config = config
         self.dataset_path = self.config.path
         self.split = self.config.split
@@ -33,10 +34,7 @@ class BaseDataset(data.Dataset):
         self.lidar_sparsity = 1.
         self.lidar_sparsity_decay = config.lidar_sparsity_decay
 
-        if is_train:
-            self.preprocess = self._train_preprocess
-        else:
-            self.preprocess = self._val_preprocess
+        self.preprocess = self._preprocess
 
     def _get_filepaths(self):
         raise NotImplementedError
@@ -85,8 +83,5 @@ class BaseDataset(data.Dataset):
     def get_length(self):
         return self.__len__()
 
-    def _train_preprocess(self, image, depth, gt):
-        raise NotImplementedError
-
-    def _val_preprocess(self, image, depth, gt):
+    def _preprocess(self, image, depth, gt):
         raise NotImplementedError

@@ -18,10 +18,6 @@ data:
     lidar_sparsity_decay: 1.0
     batch_size: 2
     workers: 4
-    occlusion_filter:
-      params:
-        distance_threshold: 1.0
-        kernel_size: 6
     augmentation:
       random_flip: 0.5
       random_noise: 5
@@ -99,7 +95,7 @@ model:
 optimizer:
   name: 'radam'
   params:
-    lr: 0.00005
+    lr: 0.0001
     weight_decay: 0.0005
 #    grad_clip: False
 lr_policy:

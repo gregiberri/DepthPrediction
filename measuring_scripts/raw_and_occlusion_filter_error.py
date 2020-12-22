@@ -45,4 +45,4 @@ for i, inputs in enumerate(train_loader):
 print(f'\n'
       f'mean_raw_error: {train_metric.rmse.mean():.3f}\n'
       f'mean_raw_point_number: {np.mean(raw_point_numbers):.3f}')
-train_metric.rmse_scene_meter.draw_histogram('occlusion_filtered.png')
+train_metric.rmse_scene_meter.draw_histogram('7_occlusion_filtered.png')

@@ -67,11 +67,11 @@ class Solver(object):
         self.set_config(config)
 
         # get dataloaders
-        self.train_loader, self.niter_per_epoch = get_dataloader(self.config.data, is_train=True)
+        self.train_loader, self.niter_train = get_dataloader(self.config.data, is_train=True)
         self.val_loader, self.niter_val = get_dataloader(self.config.data, is_train=False)
 
         self.loss_meter = AverageMeter()
-        self.train_metric = Metrics(self.result_dir, tag='train', niter=self.niter_per_epoch)
+        self.train_metric = Metrics(self.result_dir, tag='train', niter=self.niter_train)
         self.val_metric = Metrics(self.result_dir, tag='val', niter=self.niter_val)
         self.visualizer = Visualizer(self.writer)
 
@@ -202,98 +202,44 @@ class Solver(object):
             raise SystemError('No cuda device found.')
         return model_input_dict
 
-    def train(self):
-        # start epoch
-        for self.epoch in range(self.epoch, self.config.env.epochs):
-            self.before_epoch()
+    def get_loader(self, mode, scenes=None):
+        if mode == 'train':
+            return self.train_loader, self.niter_train
+        elif mode == 'val':
+            return self.val_loader, self.niter_val
+        elif mode == 'scene_retrain':
+            scene_avg = np.median([val for key, val in scenes.items()])
+            retrain_scenes = [key for key, val in scenes.items() if val > scene_avg]
+            return get_dataloader(self.config, is_train=True, scenes=retrain_scenes)
+        else:
+            raise ValueError(f'Wrong solver mode: {mode}')
 
-            # set loading bar
-            bar_format = '{desc}[{elapsed}<{remaining},{rate_fmt}]'
-            pbar = tqdm(range(self.niter_per_epoch), file=sys.stdout, bar_format=bar_format)
+    def get_metric(self, mode, niter=None):
+        if mode == 'train':
+            return self.train_metric
+        elif mode == 'val':
+            return self.val_metric
+        elif mode == 'scene_retrain':
+            return Metrics(self.result_dir, tag='bad_scene', niter=niter)
+        else:
+            raise ValueError(f'Wrong solver mode: {mode}')
 
-            # reset the metric and the loss meter to the initial state
-            self.train_metric.reset()
-            self.loss_meter.reset()
-
-            # convert the train loader to be an iterable
-            train_iter = iter(self.train_loader)
-
-            for idx in pbar:
-                # start measuring preproc time
-                t_start = time.time()
-
-                # get the minibatch and filter out to the input and gt elements
-                minibatch = train_iter.next()
-                model_input_dict = self.get_model_input_dict(minibatch)
-
-                # preproc time
-                t_end = time.time()
-                preproc_time = t_end - t_start
-
-                # start measuring the train time
-                t_start = time.time()
-
-                # train
-                pred, loss = self.step(**model_input_dict)
-
-                # train time
-                t_end = time.time()
-                train_time = t_end - t_start
-                self.loss_meter.update(loss)
-                self.train_metric.compute_metric(pred, model_input_dict, minibatch['scene'])
-
-                print_str = '[Train] Epoch{}/{}'.format(self.epoch, self.config.env.epochs) \
-                            + ' Iter{}/{}:'.format(idx + 1, self.niter_per_epoch) \
-                            + ' lr=%.8f' % self.get_learning_rates()[0] \
-                            + ' losses=%.2f' % loss.item() \
-                            + '(%.2f)' % self.loss_meter.mean() \
-                            + ' preproc time:%.2f' % preproc_time \
-                            + ' train time:%.2f ' % train_time \
-                            + self.train_metric.get_snapshot_info()
-                pbar.set_description(print_str, refresh=False)
-
-                if idx % self.config.env.save_train_frequency == 0:
-                    self.visualizer.visualize(minibatch, pred, self.epoch, tag='train')
-                    self.train_metric.add_scalar(self.writer, iteration=idx)
-
-            if self.config.env.bad_scene_retrain:
-                self.bad_scene_retrain(self.train_metric.rmse_scene_meter.mean(), self.epoch)
-
-            self.after_epoch()
-
-            self.train_metric.on_epoch_end()
-            self.save_best_checkpoint(self.train_metric.epoch_results)
-
-            # validation
-            # first set the val dataset lidar sparsity to the train data current one
-            self.val_loader.dataset.lidar_sparsity = self.train_loader.dataset.lidar_sparsity
-            # TODO
-            # self.eval()
-
-        self.writer.close()
-        return min(self.train_metric.epoch_results['irmse'])  # best value
-
-    def bad_scene_retrain(self, scenes):
-        scene_avg = np.median([val for key, val in scenes.items()])
-        retrain_scenes = [key for key, val in scenes.items() if val > scene_avg]
-        scene_retrain_loader, scene_retrain_niter = build_loader(self.config, is_train=True, scenes=retrain_scenes)
-
-        metric = Metrics(self.result_dir, tag='bad_scene', niter=scene_retrain_niter)
+    def run_epoch(self, mode='train', scenes=None):
+        loader, niter = self.get_loader(mode, scenes=scenes)
+        metric = self.get_metric(mode, niter=niter)
+        epoch_iterator = iter(loader)
 
         # set loading bar
         bar_format = '{desc}[{elapsed}<{remaining},{rate_fmt}]'
-        pbar = tqdm(range(scene_retrain_niter), file=sys.stdout, bar_format=bar_format)
-
-        # convert the train loader to be an iterable
-        bad_scene_retrain_iter = iter(scene_retrain_loader)
+        pbar = tqdm(range(niter), file=sys.stdout, bar_format=bar_format)
 
         for idx in pbar:
             # start measuring preproc time
             t_start = time.time()
 
             # get the minibatch and filter out to the input and gt elements
-            minibatch = bad_scene_retrain_iter.next()
-            filtered_minibatch = self.get_model_input_dict(minibatch)
+            minibatch = epoch_iterator.next()
+            model_input_dict = self.get_model_input_dict(minibatch)
 
             # preproc time
             t_end = time.time()
@@ -303,93 +249,92 @@ class Solver(object):
             t_start = time.time()
 
             # train
-            pred, loss = self.step(**filtered_minibatch)
+            pred, loss = self.step(mode, **model_input_dict)
 
             # train time
             t_end = time.time()
-            train_time = t_end - t_start
-            metric.compute_metric(pred, filtered_minibatch, minibatch['scene'])
+            cmp_time = t_end - t_start
+            if loss is not None and mode == 'train':
+                self.loss_meter.update(loss)
+                self.writer.add_scalar("train/loss", self.loss_meter.mean(), self.epoch)
+            else:
+                loss = torch.as_tensor(0)
+            metric.compute_metric(pred, model_input_dict, minibatch['scene'])
 
-            print_str = '[Bad_Scene_Retrain] Epoch{}/{}'.format(self.epoch, self.config['solver']['epochs']) \
-                        + ' Iter{}/{}:'.format(idx + 1, scene_retrain_niter) \
-                        + ' lr=%.8f' % self.get_learning_rates()[0] \
-                        + ' preproc time:%.2f' % preproc_time \
-                        + ' train time:%.2f ' % train_time \
-                        + metric.get_snapshot_info()
+            print_str = f'[{mode}] Epoch {self.epoch}/{self.config.env.epochs} ' \
+                        + f'Iter{idx + 1}/{niter}: ' \
+                        + f'lr={self.get_learning_rates()[0]:.8f} ' \
+                        + f'losses={loss.item():.2f}({self.loss_meter.mean():.2f}) ' \
+                        + metric.get_snapshot_info() \
+                        + f' prp: {preproc_time:.2f}s ' \
+                        + f'inf :{cmp_time:.2f}s ' \
+
             pbar.set_description(print_str, refresh=False)
 
-        metric.on_epoch_end()
+            if idx % self.config.env.save_train_frequency == 0:
+                self.visualizer.visualize(minibatch, pred, self.epoch, tag='train')
+                metric.add_scalar(self.writer, iteration=idx)
 
-        del scene_retrain_loader, scene_retrain_niter, metric
+    def train(self):
+        # start epoch
+        for self.epoch in range(self.epoch, self.config.env.epochs):
+            self.before_epoch()
+
+            self.run_epoch(mode='train')
+
+            # run another epoch on scenes with bad results
+            if self.config.env.bad_scene_retrain:
+                self.bad_scene_retrain(self.train_metric.rmse_scene_meter.mean())
+
+            self.after_epoch()
+            self.train_metric.on_epoch_end()
+            # validation
+            # first set the val dataset lidar sparsity to the train data current one
+            # self.val_loader.dataset.lidar_sparsity = self.train_loader.dataset.lidar_sparsity
+            self.eval()
+            self.save_best_checkpoint(self.val_metric.epoch_results)
+
+
+        self.writer.close()
+
+        return min(self.train_metric.epoch_results['rmse'])  # best value
+
+    def bad_scene_retrain(self, scenes):
+        self.run_epoch(mode='scene_retrain', scenes=scenes)
 
     def eval(self):
-        test_iter = iter(self.val_loader)
+        self.run_epoch(mode='val')
 
-        # set loading bar
-        bar_format = '{desc}[{elapsed}<{remaining},{rate_fmt}]'
-        pbar = tqdm(range(self.niter_val), file=sys.stdout, bar_format=bar_format)
+        logging.info(f'After Epoch {self.epoch}/{self.config.env.epochs}, {self.val_metric.get_result_info()}')
 
-        for idx in pbar:
-            t_start = time.time()
-            minibatch = test_iter.next()
-            filtered_kwargs = self.get_model_input_dict(minibatch)
-            # print(filtered_kwargs)
-            t_end = time.time()
-            io_time = t_end - t_start
-            t_start = time.time()
-            pred = self.step_no_grad(**filtered_kwargs)
-            t_end = time.time()
-            inf_time = t_end - t_start
-
-            t_start = time.time()
-            self.val_metric.compute_metric(pred, filtered_kwargs, minibatch['scene'])
-            t_end = time.time()
-            cmp_time = t_end - t_start
-
-            print_str = '[Test] Epoch{}/{}'.format(self.epoch, self.config['solver']['epochs']) \
-                        + ' Iter{}/{}: '.format(idx + 1, self.niter_val) \
-                        + self.val_metric.get_snapshot_info() \
-                        + ' preproc time:%.2f' % io_time \
-                        + ' inference time:%.2f' % inf_time \
-                        + ' compute time:%.2f' % cmp_time
-            pbar.set_description(print_str, refresh=False)
-            """
-            visualization for model output and feature maps.
-            """
-            if idx % 100 == 0:
-                self.visualizer.visualize(minibatch, pred, self.epoch, tag='val')
-                self.val_metric.add_scalar(self.writer, iteration=idx)
-
-        self.writer.add_scalar("train/loss", self.loss_meter.mean(), self.epoch)
-
-        logging.info('After Epoch{}/{}, {}'.format(self.epoch, self.config['solver']['epochs'],
-                                                   self.val_metric.get_result_info()))
         self.val_metric.on_epoch_end()
 
-    def step(self, **model_inputs):
+    def step(self, mode='train', **model_inputs):
         """
         :param model_inputs:
         :return:
         """
-        self.iteration += 1
-        output_dict = self.model(**model_inputs)
+        if mode == 'val':
+            with torch.no_grad():
+                pred = self.model(**model_inputs)
 
-        pred = output_dict['pred']
-        loss = output_dict['loss']
+            return pred['pred'], None
 
-        # backward
-        loss.backward()
+        elif mode == 'train' or mode == 'scene_retrain':
+            self.iteration += 1
+            output_dict = self.model(**model_inputs)
 
-        self.optimizer.step()
-        self.optimizer.zero_grad()
-        self.lr_policy.step(self.epoch)
+            pred = output_dict['pred']
+            loss = output_dict['loss']
 
-        return pred, loss.data
+            # backward
+            loss.backward()
 
-    def step_no_grad(self, **kwargs):
-        with torch.no_grad():
-            pred, _ = self.model(**kwargs)
-        return pred
+            self.optimizer.step()
+            self.optimizer.zero_grad()
+            self.lr_policy.step(self.epoch)
+
+            return pred, loss.data
 
     def before_epoch(self):
         self.iteration = 0
