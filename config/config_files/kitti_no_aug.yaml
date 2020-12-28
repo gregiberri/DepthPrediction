@@ -1,0 +1,10 @@
+base_config: 'config/config_files/kitti_base.yaml'
+data:
+  name: "kitti"
+  params:
+    augmentation:
+      random_flip: 0.0
+      random_noise: 0
+      gauss_blur: 0.0
+      random_shift: 0
+      random_hue_saturation: 0

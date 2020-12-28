@@ -1,0 +1,3 @@
+base_config: 'config/config_files/kitti_base.yaml'
+optimizer:
+  name: 'adam'
